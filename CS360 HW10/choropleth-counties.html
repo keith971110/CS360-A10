@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+    .counties {
+        fill: none;
+    }
+
+    .states {
+        fill: none;
+        stroke: #fff;
+        stroke-linejoin: round;
+    }
+    .hidden {
+        display: none;
+    }
+    .tooltip {
+        position: absolute;
+        background-color: #fff;
+        padding: 10px 15px;
+        border-radius: 8px;
+    }
+</style>
+<svg width="960" height="600"></svg>
+<div class="tooltip"></div>
+<script src="https://d3js.org/d3.v6.min.js"></script>
+<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+<script src="https://d3js.org/topojson.v2.min.js"></script>
+<script>
+
+    var svg = d3.select("svg"),
+        width = +svg.attr("width"),
+        height = +svg.attr("height");
+
+    var education = new Map();
+    var areaList = new Map();
+
+    var path = d3.geoPath();
+
+    var x = d3.scaleLinear()
+        .domain([1, 70])
+        .rangeRound([600, 860]);
+
+    var color = d3.scaleSequential()
+        .domain([0, 70])
+        .interpolator(d3.interpolateBlues)
+        .unknown("#ccc");
+
+
+    var g = svg.append("g")
+        .attr("class", "key")
+        .attr("transform", "translate(0,40)");
+
+    g.selectAll("rect")
+        .data(d3.range(0, 70))
+        .enter().append("rect")
+        .attr("height", 8)
+        .attr("x", function (d) {
+            return x(d);
+        })
+        .attr("width", function (d, index) {
+            return x(d) - x(d - 1);
+        })
+        .attr("fill", function (d) {
+            return color(d);
+        });
+
+    g.append("text")
+        .attr("class", "caption")
+        .attr("x", x.range()[0])
+        .attr("y", -6)
+        .attr("fill", "#000")
+        .attr("text-anchor", "start")
+        .attr("font-weight", "bold")
+        .attr("font-size", "18px")
+        .text("education rate");
+
+    g.call(d3.axisBottom(x)
+        .tickSize(13)
+        .tickFormat(function (x, i) {
+            return i ? x : x + "%";
+        })
+        .tickValues(color.domain()))
+        .select(".domain")
+        .remove();
+
+    var promises = [
+        d3.json("https://d3js.org/us-10m.v1.json"),
+        // d3.tsv("data/unemployment.tsv", function(d) { unemployment.set(d.id, +d.rate); })
+        d3.csv("data/Education.csv", function (d) {
+            if (d.id === 0) return;
+            education.set(d.id, +d.Percent);
+            areaList.set(d.id, d['Area name']);
+        })
+    ]
+
+    Promise.all(promises).then(ready)
+
+    function ready([us]) {
+        svg.append("g")
+            .attr("class", "counties")
+            .selectAll("path")
+            .data(topojson.feature(us, us.objects.counties).features)
+            .enter().append("path")
+            .attr("fill", function (d) {
+                return color(d.rate = education.get(d.id) || undefined);
+            })
+
+            .on('mouseover', function (...d) {
+                console.log(d[1]);
+                const tooltip = document.querySelector('.tooltip');
+                tooltip.innerHTML = `state name: ${areaList.get(d[1].id)};<br /> rate: ${education.get(d[1].id)}%`
+                tooltip.style.left = `${d[0].offsetX - 20}px`;
+                tooltip.style.top = `${d[0].offsetY + 20}px`;
+                tooltip.classList.remove('hidden');
+            })
+
+            .on('mouseout', function (...d) {
+                const tooltip = document.querySelector('.tooltip');
+                tooltip.classList.add('hidden');
+            })
+            .attr("d", path)
+                .append("title")
+            .text(function (d) {
+                return d.rate + "%";
+            })
+        svg.append("path")
+            .datum(topojson.mesh(us, us.objects.states, function (a, b) {
+                return a !== b;
+            }))
+            .attr("class", "states")
+            .attr("d", path);
+    }
+
+</script>
